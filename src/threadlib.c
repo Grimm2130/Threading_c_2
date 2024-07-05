@@ -65,6 +65,8 @@ void thread_create( thread_t* th, char * name )
     // init pthread object and attr
     memset( &th->m_thread, 0, sizeof(pthread_t) );
     memset( &th->m_thread_attr, 0, sizeof(pthread_attr_t) );
+    // init Semeaphore
+    sem_init( &th->sem, 0, 0 );        // base value is zero
     // init mutex and attr
     memset( &th->m_thread_mut, 0, sizeof(pthread_mutex_t) );
     memset( &th->m_thread_mut_attr, 0, sizeof(pthread_mutexattr_t) );
@@ -94,6 +96,7 @@ void thread_set_attr_joinable_detached( thread_t* th, bool joinable )
     assert(th);
     pthread_attr_setdetachstate( &th->m_thread_attr, 
     joinable ? PTHREAD_CREATE_JOINABLE : PTHREAD_CREATE_DETACHED );
+    SET_BIT(th->m_flags, THREAD_DETACHED);
 }
 
 /// @brief Starts the threads operation
@@ -183,6 +186,28 @@ void thread_set_pause_fn( thread_t* th, void *pause_arg, void *(*pause_fn)(void 
     th->pause_fn_ptr = pause_fn;
 }
 
+#pragma region Foods
+
+#pragma endregion
+void thread_destroy( thread_t* th )
+{
+    assert( !IS_BIT_SET(th->m_flags, THREAD_RUNNING) );     // thread not running
+    th->pause_arg = th->arg = NULL;
+    th->pause_fn_ptr = th->thread_fn_ptr = NULL;
+    pthread_mutex_destroy(&th->m_thread_mut);
+    pthread_mutexattr_destroy( &th->m_thread_mut_attr);
+    pthread_cond_destroy(&th->m_thread_cv);
+    pthread_condattr_destroy( &th->m_thread_cv_attr);
+    pthread_attr_destroy( &th->m_thread_attr );
+
+    // TODO: 
+    // if( !IS_BIT_SET(th->m_flags, THREAD_DETACHED) )
+    // {
+    //     pthread_join( th->m_thread, NULL );
+    // }
+    // pthread_
+}
+
 /******************************************************************************/
                         // Thread Pool Object
 /******************************************************************************/
@@ -190,16 +215,19 @@ void thread_set_pause_fn( thread_t* th, void *pause_arg, void *(*pause_fn)(void 
 /******************************************************************************/
                         // Static Thread Pool Operations
 
-// Checks if the thread is in the pool
+/// @brief Checks if the thread is in the pool
+/// @param t_pool 
+/// @param th 
+/// @return 
 static bool thread_in_pool( threadpool_t* t_pool, thread_t* th )
 {
     glnode_t* node;
     bool res = false;
-    GLTHREAD_ITERATOR_START( (&t_pool->thread_pool_lis), node )
+    GLTHREAD_ITERATOR_START( (&t_pool->threadpool_lis), node )
     {
         if( node )
         {
-            thread_t* temp = (thread_t*)(node - t_pool->thread_pool_lis.base_addr);
+            thread_t* temp = (thread_t*)(node - t_pool->threadpool_lis.base_addr);
             if( strcmp(temp->name, th->name) == 0 )
             {
                 res = true;
@@ -207,52 +235,155 @@ static bool thread_in_pool( threadpool_t* t_pool, thread_t* th )
             }
         }
     }
-    GLTHREAD_ITERATOR_END( (&t_pool->thread_pool_lis) )
+    GLTHREAD_ITERATOR_END( (&t_pool->threadpool_lis) )
     return res;
+}
+
+/// @brief Thread Pool Operation Stage 3
+/// @param t_pool 
+/// @param thread 
+static void* threadpool_op_stage3(threadpool_t* t_pool, thread_t * thread)
+{
+    assert( t_pool );
+    assert( thread );
+
+    if( !IS_BIT_SET( thread->m_flags, THREAD_RUNNING ) )
+    {
+        pthread_mutex_lock( &t_pool->pool_mut );
+        glthread_add_node( &t_pool->threadpool_lis, &thread->glue );
+        pthread_cond_wait( &thread->m_thread_cv, &thread->m_thread_mut );       // Hold thread on the conditional
+        pthread_mutex_unlock( &t_pool->pool_mut );
+    }
+    else
+    {
+        // TODO: 
+    }
+}
+
+/// @brief Start the thread in the pool
+/// @param arg 
+static void threadpool_run_thread ( thread_t* th )
+{
+    assert(th);
+    // Check if the thread has been created
+    if( IS_BIT_SET(th->m_flags, THREAD_CREATED) )
+    {
+        // signal the thread to start operation
+        pthread_cond_signal( &th->m_thread_cv );
+    }
+    else
+    {
+        thread_run( th, th->arg, th->thread_fn_ptr );
+    }
+}
+
+/// @brief Call the execute and recycle 
+/// @param arg 
+static void* thread_execute_and_recycle( void* arg )
+{
+    thread_execution_data_t* thread_ex_data = (thread_execution_data_t*)arg;
+    
+    // Run the execution stage
+    while (1)
+    {
+        // execute the application's function
+        thread_ex_data->thread_ex_fn( thread_ex_data->arg);
+
+        // recycle the thread
+        thread_ex_data->thread_recyle( thread_ex_data->t_pool, thread_ex_data->th );
+
+        if( IS_BIT_SET(thread_ex_data->th->m_flags, THREAD_CALLER_BLOCKED ) )
+        {
+            UNSET_BIT(thread_ex_data->th->m_flags, THREAD_CALLER_BLOCKED );     // unset
+            sem_post( &thread_ex_data->th->sem );
+        } 
+    }
+    
 }
 
 /******************************************************************************/
 
 /// @brief Instantiate the thread pool
 /// @param t_pool 
-void thread_pool_init( threadpool_t* t_pool )
+void threadpool_init( threadpool_t* t_pool )
 {
-    glthread_init( &t_pool->thread_pool_lis, GET_STRUCT_OFFSET(thread_t, glue) );
+    glthread_init( &t_pool->threadpool_lis, GET_STRUCT_OFFSET(thread_t, glue) );
     pthread_mutex_init( &t_pool->pool_mut, NULL );
 }
 
 /// @brief Insert New Thread into pool
 /// @param t_pool 
 /// @param thread 
-void thread_pool_insert_new_thread( threadpool_t* t_pool, thread_t * thread )
+void threadpool_insert_new_thread( threadpool_t* t_pool, thread_t * thread )
 {
     assert(t_pool);
     assert(thread);
-    pthread_mutex_lock( &t_pool->pool_mut );
-    if( !thread_in_pool(t_pool, thread) )
+    if( !IS_BIT_SET( thread->m_flags, THREAD_RUNNING ) )
     {
-        glthread_add_node( &t_pool->thread_pool_lis, &thread->glue );
+        pthread_mutex_lock( &t_pool->pool_mut );
+        if( !thread_in_pool(t_pool, thread) )       // ensure that the thread is not in the pool
+        {
+            glthread_add_node( &t_pool->threadpool_lis, &thread->glue );
+        }
+        pthread_mutex_unlock( &t_pool->pool_mut );
     }
-    pthread_mutex_unlock( &t_pool->pool_mut );
+    else
+    {
+        // TODO: 
+    }  
 }
 
 /// @brief Gets the next available thread from the pool
 /// @param t_pool Thread Pool reference object
 /// @return return 
-thread_t* thread_pool_get_thread( threadpool_t* t_pool )
+thread_t* threadpool_get_thread( threadpool_t* t_pool )
 {
-    thread_t* nextThread;
+    thread_t* nextThread = NULL;
     pthread_mutex_lock( &t_pool->pool_mut );
-    nextThread = t_pool->thread_pool_lis.head;
-    if( t_pool->thread_pool_lis.head )
+    if( t_pool->threadpool_lis.head )
     {
-        t_pool->thread_pool_lis.head = t_pool->thread_pool_lis.head->next;
+        nextThread = (thread_t*)(t_pool->threadpool_lis.head - t_pool->threadpool_lis.base_addr);
+        t_pool->threadpool_lis.head = t_pool->threadpool_lis.head->next;
     }
     pthread_mutex_unlock( &t_pool->pool_mut );
     return nextThread;
 }
 
-void thread_pool_dispatch_thread( threadpool_t* t_pool, void* (*thread_fn) (void*), void* arg )
+void threadpool_dispatch_thread( threadpool_t* t_pool, void* (*thread_fn) (void*), void* arg, bool block_caller )
 {
-    
+    //  Get the thread from the queue
+    thread_t* nextTh = threadpool_get_thread( t_pool );
+
+    // Validate thread is not null
+    if( nextTh )
+    {
+        // Update the thread data arguments
+        thread_execution_data_t* thread_ex_data = (thread_execution_data_t*)nextTh->arg;
+        if( !thread_ex_data )
+        {
+            // newly added thread Update data
+            thread_ex_data = (thread_execution_data_t*)calloc(1, sizeof(thread_execution_data_t));
+        }
+        // Set execution data values
+        thread_ex_data->arg = arg;
+        thread_ex_data->thread_ex_fn = thread_fn;
+        thread_ex_data->thread_recyle = threadpool_op_stage3;
+        thread_ex_data->t_pool = t_pool;
+        thread_ex_data->th = nextTh;
+
+        nextTh->arg = thread_ex_data;       // Ensure argument address is referenced
+        nextTh->thread_fn_ptr = thread_execute_and_recycle; // Set the thread's entery funtion
+
+        threadpool_run_thread( nextTh );
+
+        if( block_caller )
+        {
+            SET_BIT( nextTh->m_flags, THREAD_CALLER_BLOCKED );
+            sem_wait( &nextTh->sem );       // Block caller
+            // Sem has been signalled
+            sem_destroy( &nextTh->sem );
+        }
+    }
+
+    // thread_run
 }
