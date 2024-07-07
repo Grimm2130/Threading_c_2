@@ -32,16 +32,21 @@ static inline void thread_set_flag_status( uint32_t * volatile flags, THREAD_FLA
 }
 
 /******************************************************************************/
-                        // Thread Object
+                        // * Thread
 /******************************************************************************/
 
 /// @brief Instantiate a new thread object
 /// @param th Thread object
 /// @param name Name of thread
-void thread_create( thread_t* th, char * name )
+void thread_create( thread_t* th, const char * name )
 {
     assert( th );
     assert( name );
+
+    #if DEBUG
+    printf("\t[%s, __DEBUG__] : >> Enter \n", __func__);
+    #endif
+    memset( th->name, '\0', THREAD_NAME_LEN );
     // Set thread name
     if( strlen(name) >= THREAD_NAME_LEN )
     {
@@ -52,7 +57,7 @@ void thread_create( thread_t* th, char * name )
     }
     else
     {
-        memcpy( th->name, name, strlen(name) );
+        memcpy( th->name, name, strlen(name) );     // copy the name into the thread
     }
     // instantiate flags
     th->m_flags = 0;
@@ -65,38 +70,53 @@ void thread_create( thread_t* th, char * name )
     // init pthread object and attr
     memset( &th->m_thread, 0, sizeof(pthread_t) );
     memset( &th->m_thread_attr, 0, sizeof(pthread_attr_t) );
-    // init Semeaphore
+    // init Semaphore
     sem_init( &th->sem, 0, 0 );        // base value is zero
     // init mutex and attr
     memset( &th->m_thread_mut, 0, sizeof(pthread_mutex_t) );
-    memset( &th->m_thread_mut_attr, 0, sizeof(pthread_mutexattr_t) );
-    pthread_mutex_init(&th->m_thread_mut, &th->m_thread_mut_attr);
+    pthread_mutex_init(&th->m_thread_mut, NULL );
     // init conditional and attr
     memset( &th->m_thread_cv, 0, sizeof(pthread_cond_t) );
-    memset( &th->m_thread_cv_attr, 0, sizeof(pthread_condattr_t) );
-    pthread_cond_init(&th->m_thread_cv, &th->m_thread_cv_attr);
+    pthread_cond_init(&th->m_thread_cv, NULL );
+
+    #if DEBUG
+    printf("\t[%s, __DEBUG__] : << Exit \n", __func__);
+    #endif
 }
 
 /// @brief Allocate memory and instantiate thread object
 /// @param name Name of thread
 /// @return Allocated Memory
-thread_t* thread_create_alloc( char * name )
+thread_t* thread_create_alloc( const char * name )
 {
+    #if DEBUG
+    printf("\t[%s, __DEBUG__] : >> Enter \n", __func__);
+    #endif
     thread_t* newTh = (thread_t*) calloc(1, sizeof(thread_t));
     thread_create( newTh, name );
+    #if DEBUG
+    printf("\t[%s, __DEBUG__] : << Exit \n", __func__);
+    #endif
     return newTh;
 }
 
 
-/// @brief Set
+/// @brief Set the thread as joinable
 /// @param th 
 /// @param joinable 
 void thread_set_attr_joinable_detached( thread_t* th, bool joinable )
 {
     assert(th);
-    pthread_attr_setdetachstate( &th->m_thread_attr, 
-    joinable ? PTHREAD_CREATE_JOINABLE : PTHREAD_CREATE_DETACHED );
+    assert( !IS_BIT_SET(th->m_flags, THREAD_CREATED ) );
+    #if DEBUG
+    printf("\t[%s, __DEBUG__] : >> Enter \n", __func__);
+    #endif
+    pthread_attr_init( &th->m_thread_attr );                // instantiate the thread attribute
+    pthread_attr_setdetachstate( &th->m_thread_attr, joinable ? PTHREAD_CREATE_JOINABLE : PTHREAD_CREATE_DETACHED );
     SET_BIT(th->m_flags, THREAD_DETACHED);
+    #if DEBUG
+    printf("\t[%s, __DEBUG__] : << Exit \n", __func__);
+    #endif
 }
 
 /// @brief Starts the threads operation
@@ -108,18 +128,23 @@ void thread_run( thread_t* th, void* arg, void* (*fn_ptr)(void*) )
     assert(th);
     assert(arg);
     assert(fn_ptr);
+    #if DEBUG
+    printf("\t[%s, __DEBUG__] : >> Enter \n", __func__);
+    #endif
     th->arg = arg;
     th->thread_fn_ptr = fn_ptr;
-    if( pthread_create( &th->m_thread, &th->m_thread_attr, th->thread_fn_ptr, th->arg) == 0 )
-    {
-        SET_BIT( th->m_flags, THREAD_CREATED );
-        SET_BIT( th->m_flags, THREAD_RUNNING) ;
-    }
-    else
+    pthread_attr_init( &th->m_thread_attr );                // instantiate the thread attribute
+    // mark created and running flags
+    SET_BIT( th->m_flags, THREAD_CREATED );                 
+    SET_BIT( th->m_flags, THREAD_RUNNING) ;
+    if( pthread_create( &th->m_thread, &th->m_thread_attr, th->thread_fn_ptr, th->arg) != 0 )
     {
         perror("Thread creation failed");
         exit(errno);
     }
+    #if DEBUG
+    printf("\t[%s, __DEBUG__] : << Exit \n", __func__);
+    #endif
 }
 
 /// @brief Pauses the thread object
@@ -127,20 +152,28 @@ void thread_run( thread_t* th, void* arg, void* (*fn_ptr)(void*) )
 void thread_pause( thread_t* th )
 {
     assert(th);
-    // assert that thread is running and created
-    assert( IS_BIT_SET(th->m_flags, THREAD_CREATED ) );
+    assert( IS_BIT_SET( th->m_flags, THREAD_CREATED ) );    // assert that thread is running and created
+    #if DEBUG
+    printf("\t[%s, __DEBUG__] : >> Enter \n", __func__);
+    #endif
     pthread_mutex_lock( &th->m_thread_mut );
     if( IS_BIT_SET( th->m_flags, THREAD_RUNNING ) )
     {
         SET_BIT( th->m_flags, THREAD_MARKED_FOR_PAUSE );
     }
     pthread_mutex_unlock( &th->m_thread_mut );
+    #if DEBUG
+    printf("\t[%s, __DEBUG__] : << Exit \n", __func__);
+    #endif
 }
 
 /// @brief Checks that the pause flag has been set and waits for it to be unset
 /// @param th Pointer to thread object
 void thread_test_and_pause( thread_t* th )
 {
+    #if DEBUG
+    printf("\t[%s, __DEBUG__] : >> Enter \n", __func__);
+    #endif
     assert( th );
     pthread_mutex_lock( &th->m_thread_mut );
     // Check if the thread is marked for pause
@@ -148,10 +181,10 @@ void thread_test_and_pause( thread_t* th )
     {
         // set the THREAD_PAUSED bit
         SET_BIT( th->m_flags, THREAD_PAUSED );
-        // unset mark for THREAD_PAUSED bit
-        UNSET_BIT( th->m_flags, THREAD_MARKED_FOR_PAUSE);     
         // update the running flag
         UNSET_BIT( th->m_flags, THREAD_RUNNING);
+        // unset mark for THREAD_PAUSED bit
+        UNSET_BIT( th->m_flags, THREAD_MARKED_FOR_PAUSE);     
         // Wait on THREAD_PAUSED bit to be unset
         while( IS_BIT_SET( th->m_flags, THREAD_PAUSED ) )
         {
@@ -161,6 +194,9 @@ void thread_test_and_pause( thread_t* th )
     pthread_mutex_unlock( &th->m_thread_mut );
     SET_BIT( th->m_flags, THREAD_RUNNING );         // update thread's running flag
     th->pause_fn_ptr( th->pause_arg );      // run the un-THREAD_PAUSED function
+    #if DEBUG
+    printf("\t[%s, __DEBUG__] : << Exit \n", __func__);
+    #endif
 }
 
 /// @brief "R"
@@ -168,6 +204,9 @@ void thread_test_and_pause( thread_t* th )
 void thread_resume( thread_t* th )
 {
     assert( th );
+    #if DEBUG
+    printf("\t[%s, __DEBUG__] : >> Enter \n", __func__);
+    #endif
     pthread_mutex_lock( &th->m_thread_mut );
     if( IS_BIT_SET( th->m_flags, THREAD_PAUSED ) )
     {
@@ -175,45 +214,54 @@ void thread_resume( thread_t* th )
         pthread_cond_signal( &th->m_thread_cv );
     }
     pthread_mutex_unlock( &th->m_thread_mut );
+    #if DEBUG
+    printf("\t[%s, __DEBUG__] : << Exit \n", __func__);
+    #endif
 }
 
+/// @brief Thread Set Pause Function
+/// @param th 
+/// @param pause_arg 
+/// @param pause_fn 
 void thread_set_pause_fn( thread_t* th, void *pause_arg, void *(*pause_fn)(void *) )
 {
     assert( th );
     assert( pause_arg );
     assert( pause_fn );
+    #if DEBUG
+    printf("\t[%s, __DEBUG__] : >> Enter \n", __func__);
+    #endif
     th->pause_arg = pause_arg;
     th->pause_fn_ptr = pause_fn;
+    #if DEBUG
+    printf("\t[%s, __DEBUG__] : << Exit \n", __func__);
+    #endif
 }
 
-#pragma region Foods
-
-#pragma endregion
+/// @brief Thread Destroy Functino
+/// @param th 
 void thread_destroy( thread_t* th )
 {
     assert( !IS_BIT_SET(th->m_flags, THREAD_RUNNING) );     // thread not running
+    #if DEBUG
+    printf("\t[%s, __DEBUG__] : >> Enter \n", __func__);
+    #endif
     th->pause_arg = th->arg = NULL;
     th->pause_fn_ptr = th->thread_fn_ptr = NULL;
-    pthread_mutex_destroy(&th->m_thread_mut);
-    pthread_mutexattr_destroy( &th->m_thread_mut_attr);
-    pthread_cond_destroy(&th->m_thread_cv);
-    pthread_condattr_destroy( &th->m_thread_cv_attr);
     pthread_attr_destroy( &th->m_thread_attr );
-
-    // TODO: 
-    // if( !IS_BIT_SET(th->m_flags, THREAD_DETACHED) )
-    // {
-    //     pthread_join( th->m_thread, NULL );
-    // }
-    // pthread_
+    pthread_mutex_destroy(&th->m_thread_mut);
+    pthread_cond_destroy(&th->m_thread_cv);
+    #if DEBUG
+    printf("\t[%s, __DEBUG__] : << Exit \n", __func__);
+    #endif
 }
 
 /******************************************************************************/
-                        // Thread Pool Object
+                        // * Thread Pool Object
 /******************************************************************************/
 
 /******************************************************************************/
-                        // Static Thread Pool Operations
+                        // * Static Thread Pool Operations
 
 /// @brief Checks if the thread is in the pool
 /// @param t_pool 
@@ -221,43 +269,71 @@ void thread_destroy( thread_t* th )
 /// @return 
 static bool thread_in_pool( threadpool_t* t_pool, thread_t* th )
 {
+    #if DEBUG
+    printf("\t[%s, __DEBUG__] : >> Enter \n", __func__);
+    #endif
     glnode_t* node;
     bool res = false;
     GLTHREAD_ITERATOR_START( (&t_pool->threadpool_lis), node )
     {
         if( node )
         {
-            thread_t* temp = (thread_t*)(node - t_pool->threadpool_lis.base_addr);
-            if( strcmp(temp->name, th->name) == 0 )
+            thread_t* temp = (thread_t*)(node - t_pool->threadpool_lis.glue_ofset);
+            if( temp )
             {
-                res = true;
-                break;
+                if( strcmp(temp->name, th->name) == 0 )
+                {
+                    res = true;
+                    break;
+                }
             }
         }
     }
     GLTHREAD_ITERATOR_END( (&t_pool->threadpool_lis) )
+    #if DEBUG
+    printf("\t[%s, __DEBUG__] : << Exit \n", __func__);
+    #endif
     return res;
 }
 
 /// @brief Thread Pool Operation Stage 3
 /// @param t_pool 
 /// @param thread 
-static void* threadpool_op_stage3(threadpool_t* t_pool, thread_t * thread)
+static void threadpool_op_stage3(threadpool_t* t_pool, thread_t * thread)
 {
     assert( t_pool );
     assert( thread );
-
-    if( !IS_BIT_SET( thread->m_flags, THREAD_RUNNING ) )
+    #if DEBUG
+    printf("\t[%s, __DEBUG__] : >> Enter \n", __func__);
+    #endif
+    if( IS_BIT_SET( thread->m_flags, THREAD_RUNNING ) )
     {
-        pthread_mutex_lock( &t_pool->pool_mut );
-        glthread_add_node( &t_pool->threadpool_lis, &thread->glue );
-        pthread_cond_wait( &thread->m_thread_cv, &thread->m_thread_mut );       // Hold thread on the conditional
-        pthread_mutex_unlock( &t_pool->pool_mut );
+        #if DEBUG
+        printf("\t\t[%s, __DEBUG__] : Reycling thread : %s\n", __func__, thread->name);
+        #endif
+        pthread_mutex_lock( &t_pool->pool_mut );                                    
+        glthread_add_node( &t_pool->threadpool_lis, &thread->glue );        // Add thread back to pool
+        // Check if caller needs be unblocked
+        if( IS_BIT_SET(thread->m_flags, THREAD_CALLER_BLOCKED ) )
+        {
+            UNSET_BIT(thread->m_flags, THREAD_CALLER_BLOCKED );     // unset
+            sem_post( &thread->sem );
+             #if DEBUG
+            printf("\t\t[%s, __DEBUG__] : Unblocking Caller\n", __func__);
+            #endif
+        }
+        UNSET_BIT( thread->m_flags, THREAD_RUNNING );
+        SET_BIT( thread->m_flags, THREAD_BLOCKED );
+        pthread_cond_wait( &thread->m_thread_cv, &t_pool->pool_mut );   // Hold thread on the conditional
+        pthread_mutex_unlock( &t_pool->pool_mut );          
     }
     else
     {
-        // TODO: 
+        // ? Does this section get called by a thread not running?
     }
+    #if DEBUG
+    printf("\t[%s, __DEBUG__] : << Exit \n", __func__);
+    #endif
 }
 
 /// @brief Start the thread in the pool
@@ -265,40 +341,57 @@ static void* threadpool_op_stage3(threadpool_t* t_pool, thread_t * thread)
 static void threadpool_run_thread ( thread_t* th )
 {
     assert(th);
+    #if DEBUG
+    printf("\t[%s, __DEBUG__] : >> Enter \n", __func__);
+    #endif
+    SET_BIT( th->m_flags, THREAD_RUNNING );
     // Check if the thread has been created
     if( IS_BIT_SET(th->m_flags, THREAD_CREATED) )
     {
+        #if DEBUG
+        printf("\t\t[%s, __DEBUG__] : Thread already created, signalling to start execution\n", __func__);
+        #endif
         // signal the thread to start operation
+        UNSET_BIT( th->m_flags, THREAD_BLOCKED );
         pthread_cond_signal( &th->m_thread_cv );
     }
     else
     {
+        #if DEBUG
+        printf("\t\t[%s, __DEBUG__] : Thread not created, calling pthread_create to start execution\n", __func__);
+        #endif
         thread_run( th, th->arg, th->thread_fn_ptr );
     }
+    #if DEBUG
+    printf("\t[%s, __DEBUG__] : << Exit \n", __func__);
+    #endif
 }
 
 /// @brief Call the execute and recycle 
 /// @param arg 
-static void* thread_execute_and_recycle( void* arg )
+static void thread_execute_and_recycle( void* arg )
 {
+    #if DEBUG
+    printf("\t[%s, __DEBUG__] : >> Enter \n", __func__);
+    #endif
     thread_execution_data_t* thread_ex_data = (thread_execution_data_t*)arg;
-    
     // Run the execution stage
     while (1)
     {
+        #if DEBUG
+        printf("\t\t[%s, __DEBUG__] : Executing Application Function\n", __func__);
+        #endif
         // execute the application's function
         thread_ex_data->thread_ex_fn( thread_ex_data->arg);
-
+        #if DEBUG
+        printf("\t\t[%s, __DEBUG__] : Executing recycling step\n", __func__);
+        #endif
         // recycle the thread
         thread_ex_data->thread_recyle( thread_ex_data->t_pool, thread_ex_data->th );
-
-        if( IS_BIT_SET(thread_ex_data->th->m_flags, THREAD_CALLER_BLOCKED ) )
-        {
-            UNSET_BIT(thread_ex_data->th->m_flags, THREAD_CALLER_BLOCKED );     // unset
-            sem_post( &thread_ex_data->th->sem );
-        } 
     }
-    
+    #if DEBUG
+    printf("\t[%s, __DEBUG__] : << Exit \n", __func__);
+    #endif
 }
 
 /******************************************************************************/
@@ -307,8 +400,49 @@ static void* thread_execute_and_recycle( void* arg )
 /// @param t_pool 
 void threadpool_init( threadpool_t* t_pool )
 {
+    #if DEBUG
+    printf("\t[%s, __DEBUG__] : >> Enter \n", __func__);
+    #endif
+    #if DEBUG
+    printf("\t[%s, __DEBUG__] : Glue's Offset from struct base address [%d]\n", __func__, GET_STRUCT_OFFSET(thread_t, glue));
+    #endif
     glthread_init( &t_pool->threadpool_lis, GET_STRUCT_OFFSET(thread_t, glue) );
     pthread_mutex_init( &t_pool->pool_mut, NULL );
+    #if DEBUG
+    printf("\t[%s, __DEBUG__] : << Exit \n", __func__);
+    #endif
+}
+
+/// @brief Instantiate the thread pool with threads
+/// @param t_pool 
+void threadpool_init_with_threads( threadpool_t* t_pool, uint8_t num_threads )
+{
+    #if DEBUG
+    printf("\t[%s, __DEBUG__] : >> Enter \n", __func__);
+    #endif
+    threadpool_init( t_pool );
+    char* name = (char*)calloc( THREAD_NAME_LEN, sizeof(char));
+    // Instantiate and insert threads
+    for( int i = 0; i < num_threads; i++ )
+    {
+        thread_t* t = (thread_t*) calloc(1, sizeof(thread_t));
+        memset( name, '\0', THREAD_NAME_LEN );          // reset
+        sprintf( name, "Thread %d", i);
+
+        #if DEBUG
+        printf("\t\t[%s, __DEBUG__] : Setting thread name as %s \n", __func__, name);
+        #endif
+        
+        thread_create( t, name );
+        threadpool_insert_new_thread( t_pool, t );
+        #if DEBUG
+        printf("\t\t[%s, __DEBUG__] : ** \n", __func__);
+        #endif
+    }
+    free( name );
+    #if DEBUG
+    printf("\t[%s, __DEBUG__] : << Exit \n", __func__);
+    #endif
 }
 
 /// @brief Insert New Thread into pool
@@ -318,19 +452,19 @@ void threadpool_insert_new_thread( threadpool_t* t_pool, thread_t * thread )
 {
     assert(t_pool);
     assert(thread);
-    if( !IS_BIT_SET( thread->m_flags, THREAD_RUNNING ) )
+    #if DEBUG
+    printf("\t[%s, __DEBUG__] : >> Enter \n", __func__);
+    #endif
+    // mutex lock
+    pthread_mutex_lock( &t_pool->pool_mut );
+    if( !thread_in_pool(t_pool, thread) )       // ensure that the thread is not in the pool
     {
-        pthread_mutex_lock( &t_pool->pool_mut );
-        if( !thread_in_pool(t_pool, thread) )       // ensure that the thread is not in the pool
-        {
-            glthread_add_node( &t_pool->threadpool_lis, &thread->glue );
-        }
-        pthread_mutex_unlock( &t_pool->pool_mut );
+        glthread_add_node( &t_pool->threadpool_lis, &thread->glue );
     }
-    else
-    {
-        // TODO: 
-    }  
+    pthread_mutex_unlock( &t_pool->pool_mut );
+    #if DEBUG
+    printf("\t[%s, __DEBUG__] : << Exit \n", __func__);
+    #endif
 }
 
 /// @brief Gets the next available thread from the pool
@@ -338,22 +472,32 @@ void threadpool_insert_new_thread( threadpool_t* t_pool, thread_t * thread )
 /// @return return 
 thread_t* threadpool_get_thread( threadpool_t* t_pool )
 {
+    #if DEBUG
+    printf("\t[%s, __DEBUG__] : >> Enter \n", __func__);
+    #endif
     thread_t* nextThread = NULL;
     pthread_mutex_lock( &t_pool->pool_mut );
-    if( t_pool->threadpool_lis.head )
+    glnode_t* node = t_pool->threadpool_lis.head;
+    if( node )
     {
-        nextThread = (thread_t*)(t_pool->threadpool_lis.head - t_pool->threadpool_lis.base_addr);
-        t_pool->threadpool_lis.head = t_pool->threadpool_lis.head->next;
+        nextThread = (thread_t*)( (uint64_t)node - (uint64_t)t_pool->threadpool_lis.glue_ofset);
+        t_pool->threadpool_lis.head = t_pool->threadpool_lis.head->next;        // Update head
+        glnode_detach( node );
     }
     pthread_mutex_unlock( &t_pool->pool_mut );
+    #if DEBUG
+    printf("\t[%s, __DEBUG__] : << Exit \n", __func__);
+    #endif
     return nextThread;
 }
 
 void threadpool_dispatch_thread( threadpool_t* t_pool, void* (*thread_fn) (void*), void* arg, bool block_caller )
 {
+    #if DEBUG
+    printf("\t[%s, __DEBUG__] : >> Enter \n", __func__);
+    #endif
     //  Get the thread from the queue
     thread_t* nextTh = threadpool_get_thread( t_pool );
-
     // Validate thread is not null
     if( nextTh )
     {
@@ -367,23 +511,34 @@ void threadpool_dispatch_thread( threadpool_t* t_pool, void* (*thread_fn) (void*
         // Set execution data values
         thread_ex_data->arg = arg;
         thread_ex_data->thread_ex_fn = thread_fn;
-        thread_ex_data->thread_recyle = threadpool_op_stage3;
+        thread_ex_data->thread_recyle = (void*)(&threadpool_op_stage3);
         thread_ex_data->t_pool = t_pool;
         thread_ex_data->th = nextTh;
 
         nextTh->arg = thread_ex_data;       // Ensure argument address is referenced
-        nextTh->thread_fn_ptr = thread_execute_and_recycle; // Set the thread's entery funtion
+        nextTh->thread_fn_ptr = (void*)&thread_execute_and_recycle; // Set the thread's entery funtion
+
+        assert( !thread_in_pool( t_pool, nextTh) );         // Ensure thread has been removed from pool
 
         threadpool_run_thread( nextTh );
 
         if( block_caller )
         {
             SET_BIT( nextTh->m_flags, THREAD_CALLER_BLOCKED );
+            #if DEBUG
+            printf("\t\t[%s, __DEBUG__] : Blocking Caller\n", __func__);
+            #endif
             sem_wait( &nextTh->sem );       // Block caller
-            // Sem has been signalled
-            sem_destroy( &nextTh->sem );
         }
-    }
 
-    // thread_run
+    }
+    else
+    {
+        perror("Unable to retrieve thread");
+        errno = -1;
+        exit(errno);;
+    }
+    #if DEBUG
+    printf("\t[%s, __DEBUG__] : << Exit \n", __func__);
+    #endif
 }

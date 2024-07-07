@@ -10,10 +10,11 @@ typedef struct glnode
 }glnode_t;
 
 void glnode_init( glnode_t* node );
+void glnode_detach( glnode_t* node );
 
 typedef struct glthread
 {
-    uint32_t base_addr;
+    uint32_t glue_ofset;
     uint32_t node_count;
     glnode_t *head;
 }glthread_t;

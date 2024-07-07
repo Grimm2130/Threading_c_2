@@ -62,6 +62,8 @@
     "**/CMakeLists.txt": "cmake",
     "threadlib.h": "c",
     "pthread.h": "c",
-    "stdbool.h": "c"
+    "stdbool.h": "c",
+    "cpuset.h": "c",
+    "stdint.h": "c"
   }
 }

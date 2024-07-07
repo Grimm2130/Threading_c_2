@@ -1,4 +1,4 @@
-#include "hdr/threadlib.h"
+#include "../hdr/threadlib.h"
 #include <stdio.h>
 
 int main()

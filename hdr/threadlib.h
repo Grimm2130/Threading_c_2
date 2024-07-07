@@ -5,13 +5,16 @@
 #include <pthread.h>
 #include <stdint.h>
 #include <semaphore.h>
-
 #include "gl.h"
 
-#define THREAD_NAME_LEN     32
+#define THREAD_NAME_LEN     0xFF
 
 #define GET_STRUCT_OFFSET( struct_name, struct_field )   \
     ( (uint64_t)&(((struct_name*)0)->struct_field) )
+
+/* -----------------------------------------------------------------------*/
+/* --------------------------- Enumerations ------------------------------*/
+/* -----------------------------------------------------------------------*/
 
 typedef enum THREAD_FLAG
 {
@@ -25,17 +28,21 @@ typedef enum THREAD_FLAG
     THREAD_DETACHED = 31
 }THREAD_FLAG_ENUM;
 
-typedef struct thread_
+/* ----------------------------------------------------------------------------------------------------*/
+/* --------------------------------------- Data Strutures -----------------------------------------------*/
+/* ----------------------------------------------------------------------------------------------------*/
+
+/* --------------------- Thread Encasulation ----------------------- */
+
+typedef struct thread
 {
     char name[THREAD_NAME_LEN];         // thread name
+    glnode_t glue;                      // glue node for gl funtionality reference
     uint32_t m_flags;
     pthread_t m_thread;                 // Thread object
-    pthread_mutex_t m_thread_mut;       // Thread mutex object
-    pthread_mutexattr_t m_thread_mut_attr;
-    pthread_cond_t m_thread_cv;         // Thread conditional variable
-    pthread_condattr_t m_thread_cv_attr;
     pthread_attr_t m_thread_attr;       // Thread attribute
-    glnode_t glue;                      // glue node for gl funtionality reference
+    pthread_mutex_t m_thread_mut;       // Thread mutex object
+    pthread_cond_t m_thread_cv;         // Thread conditional variable
     void *pause_arg;                    // argument passed to pause fn
     void* (*pause_fn_ptr)(void*);       // Function executed after thread resumes
     void* arg;                          // Pointer to thread function arg
@@ -43,8 +50,8 @@ typedef struct thread_
     sem_t sem;
 }thread_t;
 
-thread_t* thread_create_alloc( char * name );
-void thread_create( thread_t* th, char * name );
+thread_t* thread_create_alloc( const char * name );
+void thread_create( thread_t* th, const char * name );
 void thread_set_attr_joinable_detached( thread_t* th, bool joinable );
 void thread_run( thread_t* th, void* arg, void* (*fn_ptr)(void*) );
 void thread_pause( thread_t* th );
@@ -53,7 +60,8 @@ void thread_resume( thread_t* th );
 void thread_set_pause_fn( thread_t* th, void *pause_arg, void *(*pause_fn)(void *) );
 void thread_destroy( thread_t* th );
 
-/*Thread Pool*/
+
+/* --------------------- Thread Pool ----------------------- */
 
 typedef struct threadpool
 {
@@ -61,14 +69,13 @@ typedef struct threadpool
     pthread_mutex_t pool_mut;
 }threadpool_t;
 
-
 void threadpool_init( threadpool_t* t_pool );
+void threadpool_init_with_threads( threadpool_t* t_pool, uint8_t num_threads );
 void threadpool_insert_new_thread( threadpool_t* t_pool, thread_t * thread );
 thread_t* threadpool_get_thread( threadpool_t* t_pool );
 void threadpool_dispatch_thread( threadpool_t* t_pool, void* (*thread_fn) (void*), void* arg, bool block_caller );
 
-
-/*Thread Execution Data*/
+/* ----------------- Thread Execution Data ------------------- */
 
 typedef struct thread_execution_data
 {
