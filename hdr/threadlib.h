@@ -37,8 +37,9 @@ typedef enum THREAD_FLAG
 typedef struct thread
 {
     char name[THREAD_NAME_LEN];         // thread name
+    uint32_t m_flags;                   // Thread flags
+    uint8_t m_priority;                 // Thread priority
     glnode_t glue;                      // glue node for gl funtionality reference
-    uint32_t m_flags;
     pthread_t m_thread;                 // Thread object
     pthread_attr_t m_thread_attr;       // Thread attribute
     pthread_mutex_t m_thread_mut;       // Thread mutex object
@@ -67,12 +68,15 @@ typedef struct threadpool
 {
     glthread_t threadpool_lis;
     pthread_mutex_t pool_mut;
+    int (*cmp_fn)( thread_t*, thread_t* );
 }threadpool_t;
 
 void threadpool_init( threadpool_t* t_pool );
 void threadpool_init_with_threads( threadpool_t* t_pool, uint8_t num_threads );
 void threadpool_insert_new_thread( threadpool_t* t_pool, thread_t * thread );
+void threadpool_priority_insert_thread( threadpool_t* t_pool, thread_t * thread );
 thread_t* threadpool_get_thread( threadpool_t* t_pool );
+void threadpool_set_cmp_fn( threadpool_t* t_pool, int (*cmp_fn)(thread_t*, thread_t*) );
 void threadpool_dispatch_thread( threadpool_t* t_pool, void* (*thread_fn) (void*), void* arg, bool block_caller );
 
 /* ----------------- Thread Execution Data ------------------- */

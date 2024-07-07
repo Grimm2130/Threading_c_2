@@ -61,6 +61,7 @@ void thread_create( thread_t* th, const char * name )
     }
     // instantiate flags
     th->m_flags = 0;
+    th->m_priority = 0;
     // init args
     th->arg = NULL;
     th->pause_arg = NULL;
@@ -312,7 +313,9 @@ static void threadpool_op_stage3(threadpool_t* t_pool, thread_t * thread)
         printf("\t\t[%s, __DEBUG__] : Reycling thread : %s\n", __func__, thread->name);
         #endif
         pthread_mutex_lock( &t_pool->pool_mut );                                    
-        glthread_add_node( &t_pool->threadpool_lis, &thread->glue );        // Add thread back to pool
+        
+        threadpool_priority_insert_thread( t_pool, thread );        // Add thread back to pool
+        
         // Check if caller needs be unblocked
         if( IS_BIT_SET(thread->m_flags, THREAD_CALLER_BLOCKED ) )
         {
@@ -394,6 +397,31 @@ static void thread_execute_and_recycle( void* arg )
     #endif
 }
 
+static int thread_priority_cmp( thread_t* a, thread_t *b )
+{
+    #if DEBUG
+    printf("\t[%s, __DEBUG__] : >> Enter \n", __func__);
+    #endif
+
+    int p_a, p_b, res;
+    pthread_mutex_lock( &a->m_thread_mut ); 
+    p_a = a->m_priority;
+    pthread_mutex_unlock( &a->m_thread_mut ); 
+    pthread_mutex_lock( &b->m_thread_mut ); 
+    p_b = b->m_priority;
+    pthread_mutex_unlock( &b->m_thread_mut ); 
+
+    if( p_a < p_b ) res = -1;
+    else if( p_a == p_b ) res = 0;
+    else res = 1; 
+    
+    #if DEBUG
+    printf("\t[%s, __DEBUG__] : << Exit \n", __func__);
+    #endif
+    
+    return res;
+}
+
 /******************************************************************************/
 
 /// @brief Instantiate the thread pool
@@ -408,6 +436,8 @@ void threadpool_init( threadpool_t* t_pool )
     #endif
     glthread_init( &t_pool->threadpool_lis, GET_STRUCT_OFFSET(thread_t, glue) );
     pthread_mutex_init( &t_pool->pool_mut, NULL );
+    // Set default comparator
+    t_pool->cmp_fn = thread_priority_cmp;
     #if DEBUG
     printf("\t[%s, __DEBUG__] : << Exit \n", __func__);
     #endif
@@ -459,9 +489,63 @@ void threadpool_insert_new_thread( threadpool_t* t_pool, thread_t * thread )
     pthread_mutex_lock( &t_pool->pool_mut );
     if( !thread_in_pool(t_pool, thread) )       // ensure that the thread is not in the pool
     {
-        glthread_add_node( &t_pool->threadpool_lis, &thread->glue );
+        glthread_append_node( &t_pool->threadpool_lis, &thread->glue );
     }
     pthread_mutex_unlock( &t_pool->pool_mut );
+    #if DEBUG
+    printf("\t[%s, __DEBUG__] : << Exit \n", __func__);
+    #endif
+}
+
+/// @brief Thread Priority insert
+/// @param t_pool 
+/// @param thread 
+void threadpool_priority_insert_thread( threadpool_t* t_pool, thread_t * thread )
+{
+    #if DEBUG
+    printf("\t[%s, __DEBUG__] : >> Enter \n", __func__);
+    #endif
+
+    if( t_pool->threadpool_lis.node_count == 0 )
+    {
+        threadpool_insert_new_thread( t_pool, thread );
+    }
+    else
+    {
+        bool inserted = false;
+        glnode_t *node = NULL;
+        GLTHREAD_ITERATOR_START( (&t_pool->threadpool_lis), node )
+        {
+            if( node )
+            {
+                thread_t* currTh = (thread_t*)( (uint64_t)(node) - t_pool->threadpool_lis.glue_ofset );
+                if( t_pool->cmp_fn( thread, currTh ) > 0 )  //
+                {
+                    glnode_t* prev = node->prev;
+                    if( prev )
+                    {
+                        thread->glue.prev = prev;
+                        thread->glue.next = node;
+                        prev->next = &(thread->glue);
+                        node->prev = &(thread->glue);
+                    }
+                    else
+                    {
+                       glthread_prepend_node( &t_pool->threadpool_lis, &thread->glue );
+                    }
+                    inserted = true;
+                    break;
+                }
+            }
+        }
+        GLTHREAD_ITERATOR_END( (&t_pool->threadpool_lis) )
+
+        if( !inserted )
+        {
+            glthread_append_node( &t_pool->threadpool_lis, &thread->glue );
+        }
+    }
+    
     #if DEBUG
     printf("\t[%s, __DEBUG__] : << Exit \n", __func__);
     #endif
@@ -489,6 +573,20 @@ thread_t* threadpool_get_thread( threadpool_t* t_pool )
     printf("\t[%s, __DEBUG__] : << Exit \n", __func__);
     #endif
     return nextThread;
+}
+
+
+void threadpool_set_cmp_fn( threadpool_t* t_pool, int (*cmp_fn)(thread_t*, thread_t*) )
+{
+    assert( t_pool);
+    assert( cmp_fn );
+    #if DEBUG
+    printf("\t[%s, __DEBUG__] : >> Enter \n", __func__);
+    #endif
+    t_pool->cmp_fn = cmp_fn;
+    #if DEBUG
+    printf("\t[%s, __DEBUG__] : << Exit \n", __func__);
+    #endif
 }
 
 void threadpool_dispatch_thread( threadpool_t* t_pool, void* (*thread_fn) (void*), void* arg, bool block_caller )

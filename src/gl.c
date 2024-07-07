@@ -37,6 +37,7 @@ void glthread_init( glthread_t* glt, uint32_t _offset )
     glt->node_count = 0;
     glt->glue_ofset = _offset;
     glt->head = NULL;
+    glt->tail = NULL;
     #if DEBUG
     printf("\t[%s, __DEBUG__] : << Exit \n", __func__);
     #endif
@@ -46,7 +47,7 @@ void glthread_init( glthread_t* glt, uint32_t _offset )
 /// @brief Add the
 /// @param glt 
 /// @param gln 
-void glthread_add_node( glthread_t* glt, glnode_t *gln )
+void glthread_prepend_node( glthread_t* glt, glnode_t *gln )
 {
     assert(glt);
     assert(gln);
@@ -56,6 +57,7 @@ void glthread_add_node( glthread_t* glt, glnode_t *gln )
     if( !glt->head )
     {
         glt->head = gln;
+        glt->tail = glt->head;
     }
     else
     {
@@ -69,3 +71,27 @@ void glthread_add_node( glthread_t* glt, glnode_t *gln )
     #endif
 }
 
+void glthread_append_node( glthread_t* glt, glnode_t *gln )
+{
+    assert(glt);
+    assert(gln);
+    #if DEBUG
+    printf("\t[%s, __DEBUG__] : >> Enter \n", __func__);
+    #endif
+    
+    if( !glt->tail )
+    {
+        glt->tail = gln;
+        glt->head = glt->tail;
+    }
+    else
+    {
+        glt->tail->next = gln;
+        gln->prev = glt->tail;
+        glt->tail = gln;
+    }
+    glt->node_count++;
+    #if DEBUG
+    printf("\t[%s, __DEBUG__] : << Exit \n", __func__);
+    #endif
+}
