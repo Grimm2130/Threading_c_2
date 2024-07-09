@@ -279,7 +279,7 @@ static bool thread_in_pool( threadpool_t* t_pool, thread_t* th )
     {
         if( node )
         {
-            thread_t* temp = (thread_t*)(node - t_pool->threadpool_lis.glue_ofset);
+            thread_t* temp = (thread_t*)((uint64_t)node - t_pool->threadpool_lis.glue_ofset);
             if( temp )
             {
                 if( strcmp(temp->name, th->name) == 0 )
@@ -432,7 +432,7 @@ void threadpool_init( threadpool_t* t_pool )
     printf("\t[%s, __DEBUG__] : >> Enter \n", __func__);
     #endif
     #if DEBUG
-    printf("\t[%s, __DEBUG__] : Glue's Offset from struct base address [%d]\n", __func__, GET_STRUCT_OFFSET(thread_t, glue));
+    printf("\t[%s, __DEBUG__] : Glue's Offset from struct base address [%ld]\n", __func__, GET_STRUCT_OFFSET(thread_t, glue));
     #endif
     glthread_init( &t_pool->threadpool_lis, GET_STRUCT_OFFSET(thread_t, glue) );
     pthread_mutex_init( &t_pool->pool_mut, NULL );
@@ -639,4 +639,79 @@ void threadpool_dispatch_thread( threadpool_t* t_pool, void* (*thread_fn) (void*
     #if DEBUG
     printf("\t[%s, __DEBUG__] : << Exit \n", __func__);
     #endif
+}
+
+/******************************************************************************/
+                        // * Wait Queue
+/******************************************************************************/
+
+wait_queue_t* wait_queue_alloc()
+{
+    #if DEBUG
+    printf("\t(%s) | [ __DEBUG__ ] >>>Enter\n", __func__ );
+    #endif
+    wait_queue_t* new = (wait_queue_t*) calloc(1, sizeof(wait_queue_t));
+    wait_queue_init(new);
+    #if DEBUG
+    printf("\t(%s) | [ __DEBUG__ ] <<<Exit\n", __func__ );
+    #endif
+    return new;
+}
+
+void wait_queue_init( wait_queue_t* wq )
+{
+    assert( wq );
+    #if DEBUG
+    printf("\t(%s) | [ __DEBUG__ ] >>>Enter\n", __func__ );
+    #endif
+    wq->blocked_threads = 0;
+    wq->resource_mut_cache = NULL;
+    pthread_cond_init( &wq->wq_cv, NULL );
+    #if DEBUG
+    printf("\t(%s) | [ __DEBUG__ ] <<<Exit\n", __func__ );
+    #endif
+}
+
+void wait_queue_test_and_wait( wait_queue_t* wq, wait_queue_cond_fn resource_check_fn, void* resource )
+{
+    bool block;
+    pthread_mutex_t* temp_ref = NULL;
+
+    do
+    {
+        block = resource_check_fn( resource, &temp_ref );       // Get value for resource availability
+        wq->resource_mut_cache = temp_ref;                      // cache resource mutex
+        if( block )                                             // Check value for availability
+        {
+            wq->blocked_threads++;                              // update blocked threads count
+            pthread_cond_wait( &wq->wq_cv, wq->resource_mut_cache );    // wait on resource
+            // resource is automatically unlocked here
+            wq->blocked_threads--;                              // decrement count
+            block = resource_check_fn( resource, NULL );       // do a non blocking check, if false, we lock and wait again
+        }
+    } while ( block );
+}
+
+void wait_queue_signal( wait_queue_t* wq )
+{
+    assert(wq);
+    assert(wq->resource_mut_cache);
+
+    pthread_cond_signal( &wq->wq_cv );
+
+}
+void wait_queue_broadcast( wait_queue_t* wq )
+{
+    assert(wq);
+    assert(wq->resource_mut_cache);
+    pthread_cond_broadcast( &wq->wq_cv );
+}
+
+void wait_queue_destroy( wait_queue_t* wq )
+{
+    assert(wq);
+
+    wq->blocked_threads = 0;
+    wq->resource_mut_cache = NULL;
+    pthread_cond_destroy( &wq->wq_cv );
 }

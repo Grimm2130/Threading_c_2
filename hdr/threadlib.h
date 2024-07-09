@@ -61,7 +61,6 @@ void thread_resume( thread_t* th );
 void thread_set_pause_fn( thread_t* th, void *pause_arg, void *(*pause_fn)(void *) );
 void thread_destroy( thread_t* th );
 
-
 /* --------------------- Thread Pool ----------------------- */
 
 typedef struct threadpool
@@ -91,5 +90,23 @@ typedef struct thread_execution_data
     threadpool_t* t_pool;
     thread_t* th;
 } thread_execution_data_t;
+
+/* ----------------- Wait Queue ------------------- */
+
+typedef bool (*wait_queue_cond_fn)( void* arg, pthread_mutex_t** res_mut);
+
+typedef struct wait_queue
+{
+    uint32_t blocked_threads;
+    pthread_cond_t wq_cv;
+    pthread_mutex_t* resource_mut_cache;
+} wait_queue_t;
+
+wait_queue_t* wait_queue_alloc();
+void wait_queue_init( wait_queue_t* wq );
+void wait_queue_test_and_wait( wait_queue_t* wq, wait_queue_cond_fn resource_check_fn, void* resource);
+void wait_queue_signal( wait_queue_t* wq );
+void wait_queue_broadcast( wait_queue_t* wq );
+void wait_queue_destroy( wait_queue_t* wq );
 
 #endif  // __THREADLIB_H__
