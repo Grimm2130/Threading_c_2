@@ -114,10 +114,12 @@ appln_timer_events_t* appln_timer_reg_event( appln_timer_t* appl_t, bool is_recu
     }
 
     // TODO: Add compare function to allow ordering on event's cycle
-    glthread_append_node( &appl_t->event_glue_thread[time], ev->glue )
+    glthread_append_node( &appl_t->event_glue_thread[time], ev->glue );
 
     // Get 
     #if DEBUG
     printf("\t[%s, __DEBUG__] : << Exit \n", __func__);
     #endif
+
+    return ev;
 }
