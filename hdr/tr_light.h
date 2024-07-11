@@ -6,8 +6,10 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include "gl.h"
 
 #define TR_LIGHT_COUNT 4
+#define NAME_LEN 0X1F
 
 // Forward Declarations
 typedef struct glnode glnode_t;
@@ -42,10 +44,10 @@ typedef struct appln_timer_events
 {
     bool is_recurring;
     uint32_t ex_int;            // defined in us
-    uint32_t on_cyle;
-    void* arg;
+    uint32_t on_cycle;
     appln_timer_events_cb event_fn;
-    glnode_t* glue;
+    glnode_t glue;
+    void* arg;
 }appln_timer_events_t;
 
 
@@ -73,16 +75,21 @@ appln_timer_t* appln_timer_alloc( const uint32_t trigger_slots, const uint32_t t
 void appln_timer_init( appln_timer_t* appl_t, const uint32_t trigger_slots, const uint32_t timer_intv, const uint32_t thres );
 appln_timer_events_t* appln_timer_reg_event( appln_timer_t* appl_t, bool is_recurring, uint32_t exe_intv, appln_timer_events_cb event_fn, void* arg );
 
+void appln_timer_start( appln_timer_t* appl_t );
+
 /// @brief Traffic light
 typedef struct tr_light
 {  
-    TR_COLORS_ENUM curr_colors[TR_LIGHT_COUNT];
+    TR_FACES dir;
+    TR_COLORS_ENUM curr_color;
     pthread_mutex_t log_mut;
     char* log_name;
+    FILE* fp;
     wait_queue_t* car_wq;
 }tr_light_t;
 
-void tr_light_init( tr_light_t* tr );
+void tr_light_init( tr_light_t* tr,  const TR_FACES dir );
+bool tr_light_wait_on_red( void* arg, pthread_mutex_t* mut );
 void tr_light_update_color( tr_light_t* tr );
 
 #endif /* __TR_LIGHT_H__ */

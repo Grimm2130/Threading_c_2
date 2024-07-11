@@ -64,6 +64,8 @@
     "pthread.h": "c",
     "stdbool.h": "c",
     "cpuset.h": "c",
-    "stdint.h": "c"
+    "stdint.h": "c",
+    "wait_queue.h": "c",
+    "tr_light.h": "c"
   }
 }
