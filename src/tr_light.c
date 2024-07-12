@@ -150,16 +150,16 @@ void* appln_timer_inner_fn( void* arg )
             #if DEBUG
             printf("\t\t[%s, __DEBUG__] : Current slot -> %d \n", __func__, appl_t->curr_event_slot);
             #endif
-            glthread_t slot = appl_t->event_glue_thread[ appl_t->curr_event_slot ];
+            glthread_t* slot = &(appl_t->event_glue_thread[ appl_t->curr_event_slot ]);
             glnode_t* node = NULL;
-            GLTHREAD_ITERATOR_START( (&slot), node )
+            GLTHREAD_ITERATOR_START( slot, node )
             {
                 #if DEBUG
                 printf("\t\t\t[%s, __DEBUG__] : Starting Iteration \n", __func__);
                 #endif
                 if( node )
                 {
-                    appln_timer_events_t* event = (appln_timer_events_t*)( ((uint64_t)(node)) - slot.glue_ofset );
+                    appln_timer_events_t* event = (appln_timer_events_t*)( ((uint64_t)(node)) - slot->glue_ofset );
                     if( event )
                     {
                         if( event->on_cycle <= appl_t->current_cycle )
@@ -169,7 +169,11 @@ void* appln_timer_inner_fn( void* arg )
                             printf("\t\t\t[%s, __DEBUG__] : Triggering Event [Cycle, Time] = [%d, %d] \n", __func__, event->on_cycle, appl_t->curr_event_slot );
                             #endif
                             event->event_fn( event->arg );
+                            
+                            // detach this node
                             glnode_detach( node );
+                            slot->node_count--;
+
                             // re-insert the node if recurring
                             if( event->is_recurring )
                             {
@@ -180,9 +184,9 @@ void* appln_timer_inner_fn( void* arg )
                                 event->on_cycle = next_cycle;
                                 glthread_append_node( (&appl_t->event_glue_thread[ next_time ]), &event->glue );
                             }
+                            // release event completely
                             else
                             {
-                                free(node);
                                 free(event);
                             }
                         }
@@ -195,6 +199,9 @@ void* appln_timer_inner_fn( void* arg )
             }
             GLTHREAD_ITERATOR_END( (&slot) )
             appl_t->curr_event_slot++;
+             #if DEBUG
+            printf("\t\t[%s, __DEBUG__] : Updating slot: %d\n", __func__, appl_t->curr_event_slot );
+            #endif
         }
         appl_t->current_cycle++;
         #if DEBUG

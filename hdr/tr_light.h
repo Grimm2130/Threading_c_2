@@ -53,6 +53,7 @@ typedef struct appln_timer_events
 
 appln_timer_events_t* appln_timer_events_alloc( bool is_recurring, uint32_t exe_intv, uint32_t on_cycle, appln_timer_events_cb event_fn, void* arg );
 void appln_timer_events_init( appln_timer_events_t* ev, bool is_recurring, uint32_t exe_intv, uint32_t on_cycle, appln_timer_events_cb event_fn, void* arg );
+void appln_timer_events_destroy( appln_timer_events_t* ev );
 
 
 /// @brief Application level timer
