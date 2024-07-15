@@ -4,6 +4,8 @@
 #include <memory.h>
 #include "../hdr/threadlib.h"
 #include "../hdr/tr_light.h"
+#include "../hdr/appl_timer.h"
+#include <bits/pthreadtypes.h>
 
 #define S_AS_US(s)  ((uint32_t)(s * 1000000))
 
@@ -12,7 +14,8 @@ const uint32_t timer_trigger_period = S_AS_US(1); // 5 s
 const uint32_t timer_cycle_thres = 0;
 static appln_timer_t timer;
 static tr_light_t tr_post[TR_LIGHT_COUNT] = {0};
-static volatile int car_counts[TR_LIGHT_COUNT];
+static volatile int car_counts = 0;
+static pthread_spinlock_t car_lock;
 
 struct tp_fn_arg
 {
@@ -26,15 +29,20 @@ static void* car( void* );
 
 int main()
 {
-    memset( (void*)&car_counts, 0, sizeof(int) * TR_LIGHT_COUNT);
+    pthread_spin_init( &car_lock, 0 );
     // Instantiate lights
     tr_light_init(&tr_post[0], TR_FACE_NORTH );
     tr_light_init(&tr_post[1], TR_FACE_EAST );
     tr_light_init(&tr_post[2], TR_FACE_WEST );
     tr_light_init(&tr_post[3], TR_FACE_SOUTH );
     
-    tr_post[0].curr_color = tr_post[2].curr_color = TR_COLORS_RED;
-    tr_post[1].curr_color = tr_post[3].curr_color = TR_COLORS_GREEN;
+    // reds
+    tr_post[TR_FACE_NORTH - TR_FACE_NORTH ].curr_color = TR_COLORS_RED;
+    tr_post[ TR_FACE_SOUTH - TR_FACE_NORTH  ].curr_color = TR_COLORS_RED;
+    
+    // greens
+    tr_post[TR_FACE_EAST - TR_FACE_NORTH ].curr_color = TR_COLORS_GREEN;
+    tr_post[ TR_FACE_WEST - TR_FACE_NORTH ].curr_color = TR_COLORS_GREEN;
 
     // Instantiate the timer
     appln_timer_init( &timer, timer_slots, timer_trigger_period, timer_cycle_thres );
@@ -44,18 +52,26 @@ int main()
     };
     appln_timer_events_t* updt_trl = appln_timer_reg_event( &timer, true, 3, update_traffic_lights, &arg );
     
-    appln_timer_events_t* north = appln_timer_reg_event( &timer, true, 5, launch_car_thread, &tr_post[0] );
-    appln_timer_events_t* south = appln_timer_reg_event( &timer, true, 5, launch_car_thread, &tr_post[1] );
-    appln_timer_events_t* east = appln_timer_reg_event( &timer, true, 5, launch_car_thread, &tr_post[2] );
-    appln_timer_events_t* west = appln_timer_reg_event( &timer, true, 5, launch_car_thread, &tr_post[3] );
+    launch_car_thread( (tr_light_t*)&(tr_post[ TR_FACE_NORTH - TR_FACE_NORTH ]) );
+    // for( int i = 0; i < TR_LIGHT_COUNT; i++ )
+    // {
+    //     launch_car_thread( (tr_light_t*)&tr_post[i] );
+    //     // launch_car_thread( (tr_light_t*)&tr_post[i] );
+    //     // launch_car_thread( (tr_light_t*)&tr_post[i] );
+    //     // launch_car_thread( (tr_light_t*)&tr_post[i] );
+    // }
+
 
     appln_timer_start( &timer );
 
     // pause
     while (1);
+    pthread_spin_destroy( &car_lock );
     pthread_exit(NULL);
 }
 
+/// @brief Update traffic lights
+/// @param arg 
 static void update_traffic_lights( void* arg )
 {
     #if DEBUG
@@ -73,6 +89,8 @@ static void update_traffic_lights( void* arg )
     #endif
 }
 
+/// @brief Launch Cat thread
+/// @param arg 
 static void launch_car_thread( void* arg)
 {
     #if DEBUG
@@ -99,23 +117,31 @@ static void* car( void* arg)
     #endif
     // init light objec
     tr_light_t* light = (tr_light_t*)arg;
+    int carIdx;
+
+    pthread_spin_lock( &car_lock );
+    carIdx = car_counts++;
+    pthread_spin_unlock( &car_lock );
     
-    timer_t t = {0};
-    time(&t);
+    time_t t = {0};
+    time( &t );
+    char* time = strtok(ctime(&t), "\n");
+
     // car arrives at light
-    fprintf(light->fp, "(%s) Thread [%ld] : Car %d Arrives At Light; %d Face %s\n", 
-            ctime(&t), pthread_self(), ++car_counts[light->dir-TR_FACE_NORTH], light->log_name );
-    printf("(%s) Thread [%ld] : Car %d Arrives At Light; %d Face %s\n", 
-            ctime(&t), pthread_self(), ++car_counts[light->dir-TR_FACE_NORTH], light->log_name );
+    // fprintf(light->fp, "(%s) Thread [%ld] : Car %d Arrives At Light; %d Face %s\n", 
+    //         ctime(&t), pthread_self(), car_counts[light->dir-TR_FACE_NORTH], light->log_name );
+    printf("(%s) Thread [%ld] : Car %d Arrives At Light; Face %s\n", 
+            time, pthread_self(), carIdx, light->log_name );
     
     // checks if can pass
-    wait_queue_test_and_wait( light->car_wq, tr_light_wait_on_red, light );
+    wait_queue_test_and_wait( light->car_wq, tr_light_wait_on_red, arg );
     wait_queue_broadcast( light->car_wq );
     
-    fprintf(light->fp, "(%s) Thread [%ld] : Car %d passes Light on Green; %d Face %s\n", 
-            ctime(&t), pthread_self(), ++car_counts[light->dir-TR_FACE_NORTH], light->log_name );
-    printf("(%s) Thread [%ld] : Car %d passes Light on Green; %d Face %s\n", 
-            ctime(&t), pthread_self(), ++car_counts[light->dir-TR_FACE_NORTH], light->log_name );
+    time = strtok(ctime(&t), "\n");
+    // fprintf(light->fp, "(%s) Thread [%ld] : Car %d passes Light on Green; Face %s\n", 
+    //         ctime(&t), pthread_self(), car_counts[light->dir-TR_FACE_NORTH], light->log_name );
+    printf("(%s) Thread [%ld] : Car %d passes Light on Green; Face %s\n", 
+            time, pthread_self(), carIdx , light->log_name );
     
     #if DEBUG
     printf("\t[%s, __DEBUG__] : << Exit \n", __func__);

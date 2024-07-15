@@ -95,3 +95,40 @@ void glthread_append_node( glthread_t* glt, glnode_t *gln )
     printf("\t[%s, __DEBUG__] : << Exit \n", __func__);
     #endif
 }
+
+void gl_remove_node( glthread_t* thread, glnode_t* node )
+{
+    #if DEBUG
+    printf("\t(%s) | [ __DEBUG__ ] >>>Enter\n", __func__ );
+    #endif
+
+    if( thread->head == node )
+    {
+        #if DEBUG
+        printf("\t\t(%s) | [ __DEBUG__ ] Updating head\n", __func__ );
+        #endif
+        
+        // Account for a single object in the list
+        if(  thread->node_count  == 1 )
+        {
+            #if DEBUG
+            printf("\t\t(%s) | [ __DEBUG__ ] Single Object (dereference head and tail)\n", __func__ );
+            #endif
+            thread->head = thread->tail = NULL;
+        }
+        else
+        {
+            #if DEBUG
+            printf("\t\t(%s) | [ __DEBUG__ ] Moving head and tail\n", __func__ );
+            #endif
+            thread->head = thread->head->next;
+        }
+    }
+
+    glnode_detach( node );
+    thread->node_count--;
+    
+    #if DEBUG
+    printf("\t(%s) | [ __DEBUG__ ] <<<Exit\n", __func__ );
+    #endif
+}

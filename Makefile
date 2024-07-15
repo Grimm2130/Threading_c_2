@@ -9,6 +9,7 @@ APPS_DIR=apps/
 OBJS=${BINS_DIR}gl.o	\
 	${BINS_DIR}threadlib.o	\
 	${BINS_DIR}wait_queue.o	\
+	${BINS_DIR}appl_timer.o	\
 	${BINS_DIR}tr_light.o
 
 # Executables
@@ -48,6 +49,10 @@ ${BINS_DIR}wait_queue.o:${SOURCE_DIR}wait_queue.c
 
 ${BINS_DIR}tr_light.o:${SOURCE_DIR}tr_light.c
 	${CC} ${CFLAGS} -c $^ -o $@
+
+${BINS_DIR}appl_timer.o:${SOURCE_DIR}appl_timer.c
+	${CC}  -c $^ -o $@
+# ${CC} ${CFLAGS} -c $^ -o $@
 	
 ${BINS_DIR}gl.o:${SOURCE_DIR}gl.c
 	${CC} ${CFLAGS} -c $^ -o $@
@@ -65,14 +70,17 @@ clean:
 	@if [ -f main.o ]; then \
 		rm main.o;	\
 	fi
-	@if [ -f main.exe ]; then \
+	@if [ -f main ]; then \
 		rm main.exe;	\
 	fi
-	@if [ -f threadpool_test.exe ]; then \
-		rm threadpool_test.exe;	\
+	@if [ -f threadpool_test ]; then \
+		rm threadpool_test;	\
 	fi
-	@if [ -f tr_light_test.exe ]; then \
-		rm tr_light_test.exe;	\
+	@if [ -f tr_light_test ]; then \
+		rm tr_light_test;	\
+	fi
+	@if [ -f test_appln_timer ]; then \
+		rm test_appln_timer;	\
 	fi
 	@rm *.txt;
 

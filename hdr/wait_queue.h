@@ -6,7 +6,7 @@
 #include <pthread.h>
 #include <stdbool.h>
 
-typedef bool (*wait_queue_cond_fn)( void* arg, pthread_mutex_t* res_mut);
+typedef bool (*wait_queue_cond_fn)( void* arg, pthread_mutex_t** res_mut);
 
 typedef struct wait_queue
 {

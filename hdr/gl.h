@@ -24,6 +24,7 @@ typedef struct glthread
 void glthread_init( glthread_t* glt, uint32_t _offset );
 void glthread_prepend_node( glthread_t* glt, glnode_t *gln );
 void glthread_append_node( glthread_t* glt, glnode_t *gln );
+void gl_remove_node( glthread_t* thread, glnode_t* node );
 
 #define GLTHREAD_ITERATOR_START( glt, node_ptr )    \
 {   \

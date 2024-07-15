@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <memory.h>
 #include "../hdr/tr_light.h"
+#include "../hdr/appl_timer.h"
 
 #define S_AS_US(s)  ((uint32_t)(s * 1000000))
 
