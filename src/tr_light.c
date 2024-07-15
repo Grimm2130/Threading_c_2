@@ -42,10 +42,13 @@ void tr_light_init( tr_light_t* tr, const TR_FACES dir )
     #if DEBUG
     printf("\t[%s, __DEBUG__] : >> Enter \n", __func__);
     #endif
+
     tr->dir = dir;
     tr->log_name = get_tr_light_name_from_dir(dir);
     pthread_mutex_init( &tr->log_mut, NULL );
+    pthread_spin_init( &tr->data_lock, 0);
     tr->car_wq = wait_queue_alloc();
+
     char fName[100];
     memset( fName, '\0', 100);
     sprintf( fName, "%s.%s", tr->log_name, "txt" );
@@ -76,9 +79,9 @@ bool tr_light_wait_on_red( void* arg, pthread_mutex_t** mut )
     tr_light_t* tr = (tr_light_t*)arg;
     bool res;
 
-    pthread_mutex_lock( &(tr->log_mut) );
+    pthread_spin_lock( &tr->data_lock );
     res = tr->curr_color == TR_COLORS_RED;
-    pthread_mutex_unlock( &(tr->log_mut) );
+    pthread_spin_unlock( &tr->data_lock );
 
     // If result is true
     if( res )
@@ -90,7 +93,7 @@ bool tr_light_wait_on_red( void* arg, pthread_mutex_t** mut )
         if( mut )
         {
             #if DEBUG
-            printf("\t\t\t(%s) | [ __DEBUG__ ] Caching Mutex\n", __func__ );
+            printf("\t\t\t(%s) | [ __DEBUG__ ] Caching Mutex @ address %p\n", __func__, &(tr->log_mut) );
             #endif
             (*mut) = &(tr->log_mut);
         }
@@ -123,8 +126,14 @@ void tr_light_update_color( tr_light_t* tr )
     printf("\t[%s, __DEBUG__] : >> Enter \n", __func__);
     #endif
     assert(tr);
-   
+    
+    pthread_spin_lock( &tr->data_lock );
     tr->curr_color = (tr->curr_color == TR_COLORS_RED) ? TR_COLORS_GREEN : TR_COLORS_RED;
+    pthread_spin_unlock( &tr->data_lock );
+
+    #if DEBUG
+    printf("\t(%s) | [ __DEBUG__ ] %s is now %d\n", __func__, get_tr_light_name_from_dir(tr->dir), tr->curr_color );
+    #endif
    
     #if DEBUG
     printf("\t[%s, __DEBUG__] : << Exit \n", __func__);

@@ -52,8 +52,14 @@ void wait_queue_test_and_wait( wait_queue_t* wq, wait_queue_cond_fn resource_che
             printf("\t\t(%s) | [ __DEBUG__ ] Enter Wait\n", __func__ );
             #endif
             wq->resource_mut_cache = temp_ref;                      // cache resource mutex
+             #if DEBUG
+            printf("\t\t\t(%s) | [ __DEBUG__ ] Cached Mutex @ address %p\n", __func__, wq->resource_mut_cache );
+            #endif
             wq->blocked_threads++;                              // update blocked threads count
             pthread_cond_wait( &wq->wq_cv, wq->resource_mut_cache );    // wait on resource
+            #if DEBUG
+            printf("\t\t(%s) | [ __DEBUG__ ] Signalled!!!\n", __func__ );
+            #endif
             // resource is automatically unlocked here
             wq->blocked_threads--;                              // decrement count
             block = resource_check_fn( resource, NULL );       // do a non blocking check, if false, we lock and wait again

@@ -27,13 +27,14 @@ typedef enum
 // traffic light color enumerations
 typedef enum TR_COLORS
 {
-    TR_COLORS_START = TR_FACES_START,
+    TR_COLORS_START = TR_FACES_END,
     TR_COLORS_RED,
     TR_COLORS_YELLOW,
     TR_COLORS_GREEN,
-    TR_COLORS
+    TR_COLORS_END
 }TR_COLORS_ENUM;
 
+#define ENUM_TO_STR( en )   ( #en )
 
 /// @brief Traffic light
 typedef struct tr_light
@@ -41,6 +42,7 @@ typedef struct tr_light
     TR_FACES dir;
     TR_COLORS_ENUM curr_color;
     pthread_mutex_t log_mut;
+    pthread_spinlock_t data_lock;
     char* log_name;
     FILE* fp;
     wait_queue_t* car_wq;

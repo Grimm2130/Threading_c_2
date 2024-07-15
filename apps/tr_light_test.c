@@ -50,16 +50,20 @@ int main()
         .post = tr_post, 
         .lights = 4
     };
-    appln_timer_events_t* updt_trl = appln_timer_reg_event( &timer, true, 3, update_traffic_lights, &arg );
+    appln_timer_events_t* updt_trl = appln_timer_reg_event( &timer, true, 2, update_traffic_lights, &arg );
+    appln_timer_reg_event( &timer, true, 5, launch_car_thread, &tr_post[0] );
+    appln_timer_reg_event( &timer, true, 5, launch_car_thread, &tr_post[1] );
+    appln_timer_reg_event( &timer, true, 5, launch_car_thread, &tr_post[2] );
+    appln_timer_reg_event( &timer, true, 5, launch_car_thread, &tr_post[3] );
     
-    launch_car_thread( (tr_light_t*)&(tr_post[ TR_FACE_NORTH - TR_FACE_NORTH ]) );
-    // for( int i = 0; i < TR_LIGHT_COUNT; i++ )
-    // {
-    //     launch_car_thread( (tr_light_t*)&tr_post[i] );
-    //     // launch_car_thread( (tr_light_t*)&tr_post[i] );
-    //     // launch_car_thread( (tr_light_t*)&tr_post[i] );
-    //     // launch_car_thread( (tr_light_t*)&tr_post[i] );
-    // }
+    // launch_car_thread( (tr_light_t*)&(tr_post[ 2 ]) );
+    for( int i = 0; i < TR_LIGHT_COUNT; i++ )
+    {
+        launch_car_thread( (tr_light_t*)&tr_post[i] );
+        // launch_car_thread( (tr_light_t*)&tr_post[i] );
+        // launch_car_thread( (tr_light_t*)&tr_post[i] );
+        // launch_car_thread( (tr_light_t*)&tr_post[i] );
+    }
 
 
     appln_timer_start( &timer );
@@ -83,6 +87,7 @@ static void update_traffic_lights( void* arg )
     for( uint8_t i = 0; i < lights; i++ )
     {
         tr_light_update_color( (tr_light_t*)&post[i] );
+        wait_queue_broadcast(post[i].car_wq);           // Signal waiting threads to check status
     }
     #if DEBUG
     printf("\t[%s, __DEBUG__] : << Exit \n", __func__);
@@ -135,7 +140,7 @@ static void* car( void* arg)
     
     // checks if can pass
     wait_queue_test_and_wait( light->car_wq, tr_light_wait_on_red, arg );
-    wait_queue_broadcast( light->car_wq );
+    // wait_queue_broadcast( light->car_wq );
     
     time = strtok(ctime(&t), "\n");
     // fprintf(light->fp, "(%s) Thread [%ld] : Car %d passes Light on Green; Face %s\n", 
