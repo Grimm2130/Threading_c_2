@@ -10,7 +10,11 @@ OBJS=${BINS_DIR}gl.o	\
 	${BINS_DIR}threadlib.o	\
 	${BINS_DIR}wait_queue.o	\
 	${BINS_DIR}appl_timer.o	\
-	${BINS_DIR}tr_light.o
+	${BINS_DIR}tr_light.o	\
+	${BINS_DIR}rec_mut.o	\
+	${BINS_DIR}rw_lock.o
+
+
 
 # Executables
 
@@ -27,9 +31,17 @@ test_appln_timer: ${OBJS} ${BINS_DIR}test_appln_timer.o
 tr_light_test: ${OBJS} ${BINS_DIR}tr_light_test.o
 	${CC} ${CFLAGS} $^ -o $@ ${CLIBS}
 
+rec_mut_test: ${OBJS} ${BINS_DIR}rec_mut_test.o
+	${CC} ${CFLAGS} $^ -o $@ ${CLIBS}
+
+rw_lock_test: ${OBJS} ${BINS_DIR}rw_lock_test.o
+	${CC} ${CFLAGS} $^ -o $@ ${CLIBS}
 
 # Objects
 ${BINS_DIR}main.o:${APPS_DIR}main.c
+	${CC} ${CFLAGS} -c $^ -o $@
+
+${BINS_DIR}rec_mut_test.o:${APPS_DIR}rec_mut_test.c
 	${CC} ${CFLAGS} -c $^ -o $@
 
 ${BINS_DIR}tr_light_test.o:${APPS_DIR}tr_light_test.c
@@ -41,7 +53,16 @@ ${BINS_DIR}threadpool_test.o:${APPS_DIR}threadpool_test.c
 ${BINS_DIR}test_appln_timer.o:${APPS_DIR}test_appln_timer.c
 	${CC} ${CFLAGS} -c $^ -o $@
 
+${BINS_DIR}rw_lock_test.o:${APPS_DIR}rw_lock_test.c
+	${CC} ${CFLAGS} -c $^ -o $@
+
+${BINS_DIR}rw_lock.o:${SOURCE_DIR}rw_lock.c
+	${CC} ${CFLAGS} -c $^ -o $@
+
 ${BINS_DIR}threadlib.o:${SOURCE_DIR}threadlib.c
+	${CC} ${CFLAGS} -c $^ -o $@
+
+${BINS_DIR}rec_mut.o:${SOURCE_DIR}rec_mut.c
 	${CC} ${CFLAGS} -c $^ -o $@
 
 ${BINS_DIR}wait_queue.o:${SOURCE_DIR}wait_queue.c
@@ -52,7 +73,6 @@ ${BINS_DIR}tr_light.o:${SOURCE_DIR}tr_light.c
 
 ${BINS_DIR}appl_timer.o:${SOURCE_DIR}appl_timer.c
 	${CC}  -c $^ -o $@
-# ${CC} ${CFLAGS} -c $^ -o $@
 	
 ${BINS_DIR}gl.o:${SOURCE_DIR}gl.c
 	${CC} ${CFLAGS} -c $^ -o $@
@@ -91,6 +111,10 @@ threadpool_test: prepare ${OBJS} ${BINS_DIR}threadpool_test.o threadpool_test
 test_appln_timer_test: prepare ${OBJS} ${BINS_DIR}test_appln_timer.o test_appln_timer
 
 traffic_light_test: prepare ${OBJS} ${BINS_DIR}tr_light_test.o tr_light_test
+
+recursive_mutex_test: prepare ${OBJS} ${BINS_DIR}rec_mut_test.o rec_mut_test
+
+read_write_lock_test: prepare ${OBJS} ${BINS_DIR}rw_lock_test.o rw_lock_test
 
 # traffic_light_test: prepare ${OBJS} ${BINS_DIR}tr_light_test.o tr_light_test
 
